@@ -3,6 +3,7 @@
 
 // used headers and libraries
 #include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -39,8 +40,9 @@ int main(int, char **argv)
     int tau = std::atoi(argv[5]);
     // number of flavours
     int Nf = std::atoi(argv[6]);
-    // countour deformation parameter
-    double k = std::atof(argv[7]);
+    // countour deformation parameters
+    double k1 = std::atof(argv[7]);
+    double k2 = std::atof(argv[8]);
     // identity matrix
     Eigen::MatrixXcd id = Eigen::MatrixXcd::Identity(N, N);
 
@@ -121,6 +123,20 @@ int main(int, char **argv)
         return M;
     };
 
+    // Dirac operator
+    auto DiracOperator = [&N, &muId](Eigen::MatrixXcd const &X, Eigen::MatrixXcd const &Y)
+    {
+        Eigen::MatrixXcd D = Eigen::MatrixXcd(2 * N, 2 * N);
+        // add block matrices
+        D.block(0, 0, N, N) = Eigen::MatrixXcd::Zero(N, N);
+        D.block(0, N, N, N) = I * X + muId;
+        D.block(N, 0, N, N) = I * Y + muId;
+        D.block(N, N, N, N) = Eigen::MatrixXcd::Zero(N, N);
+
+        // return Dirac operator
+        return D;
+    };
+
     // fermion determinant
     auto FermionDeterminant = [&massSqId, &muId](Eigen::MatrixXcd const &X, Eigen::MatrixXcd const &Y)
     {
@@ -146,18 +162,22 @@ int main(int, char **argv)
     std::vector<std::complex<double>> sigma(0);
     // number density container for reweighting to the original theory from the phase quenched theory
     std::vector<std::complex<double>> density(0);
-    // squared fermion determinant container for reweighting to the original theory from the phase quenched theory
+    // fermion determinant container for reweighting to the original theory from the phase quenched theory
     std::vector<std::complex<double>> fermionDet(0);
+    // Dirac operator eigenvalue container (no reweighting ~ not expectation value)
+    // std::vector<std::complex<double>> DiracEigen(0);
 
     // preallocating memory for the used matrices and initialising ~ avoiding repeated memory allocation
     // random matrices
-    Eigen::MatrixXcd alpha = RandMatrix() + I * k * id;
-    Eigen::MatrixXcd beta = RandMatrix() + I * k * id;
+    Eigen::MatrixXcd alpha = RandMatrix() + I * k1 * id;
+    Eigen::MatrixXcd beta = RandMatrix() + I * k2 * id;
     // random matrices for the next sweep
     Eigen::MatrixXcd alphaNew(N, N);
     Eigen::MatrixXcd betaNew(N, N);
     // fermionic operator matrix ~ M = D + m
     Eigen::MatrixXcd M(2 * N, 2 * N);
+    // Dirac operator matrix ~ D
+    Eigen::MatrixXcd D(2 * N, 2 * N);
     // inverse of fermionic matrix
     Eigen::MatrixXcd MInverse(2 * N, 2 * N);
     // fermion determinant
@@ -203,7 +223,6 @@ int main(int, char **argv)
         {
             // reweighting factor
             std::complex<double> reweightingFactor = std::pow(det / std::abs(det), Nf) * std::exp(-I * bosonic.imag());
-            /*
             // fermionic operator
             M = FermionicOperator(alpha + I * beta, alpha.transpose() - I * beta.transpose());
             // inverse of fermionic operator
@@ -214,20 +233,40 @@ int main(int, char **argv)
             sigma.push_back(pf * ChiralCondensate(MInverse) * reweightingFactor);
             // measuring number density for reweighting
             density.push_back((pf * NumberDensity(MInverse) + mu) * reweightingFactor);
-            */
-            // measuring fermion determinant for reweighting
+            // measuring reweighting factor
             fermionDet.push_back(reweightingFactor);
+
+            /*
+            // Dirac operator
+            D = DiracOperator(alpha + I * beta, alpha.transpose() - I * beta.transpose());
+            // computing eigenvalues
+            Eigen::ComplexEigenSolver<Eigen::MatrixXcd> eigensolver(D);
+            // check for succes
+            if (eigensolver.info() != Eigen::Success) abort();
+            // saving eigenvalues
+            for(int i = 0; i < 2 * N; i++)
+            {
+                DiracEigen.push_back(eigensolver.eigenvalues()[i]);
+            }
+            */
         }
     }
 
     // writing results to screen
     for (int i = 0; i < static_cast<int>(fermionDet.size()); i++)
     {
-        /*
-        std::cout << sigma[i].real() << " " << sigma[i].imag() << " "
-                  << density[i].real() << " " << density[i].imag() << " "
-                  << fermionDet[i].real() << " " << fermionDet[i].imag() << std::endl;
-        */
-        std::cout << fermionDet[i].real() << " " << fermionDet[i].imag() << std::endl;
+        // std::cout << sigma[i].real() << " " << sigma[i].imag() << " "
+        //           << density[i].real() << " " << density[i].imag() << " "
+        //           << fermionDet[i].real() << " " << fermionDet[i].imag() << std::endl;
     }
+
+    std::complex<double> meanFermionDet = std::accumulate(fermionDet.begin(), fermionDet.end(), 0. + I * 0.) / static_cast<double>(fermionDet.size());
+    std::cout << k1 << " " << k2 << " " << meanFermionDet.real() << " " << meanFermionDet.imag() << std::endl;
+    
+    /*
+    for (int i = 0; i < static_cast<int>(DiracEigen.size()); i++)
+    {
+        std::cout << DiracEigen[i].real() << " " << DiracEigen[i].imag() << std::endl;
+    }
+    */
 }
